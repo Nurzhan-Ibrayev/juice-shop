@@ -1,0 +1,8 @@
+- id: 10038  # Example: Content Security Policy (CSP) Header Not Set
+  action: IGNORE
+- id: 10020  # Example: Missing Anti-clickjacking Header
+  action: IGNORE
+- id: 10021  # X-Content-Type-Options Header Missing
+  action: IGNORE
+- id: 10027  # Suspicious Comments
+  action: IGNORE
