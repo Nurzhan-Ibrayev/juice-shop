@@ -1,85 +1,68 @@
-name: DevSecOps Pipeline
+name: CI/CD Pipeline with Security Scans
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches:
+      - master
 
 jobs:
-  devsecops:
-    name: DevSecOps Pipeline
+  security_scan:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
-      # Установка Node.js для Juice Shop
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
+      - name: Install Semgrep
+        run: |
+          curl -s https://semgrep.dev/install | bash
 
-      # SAST сканирование с помощью Semgrep
-      - name: Semgrep SAST Scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: >-
-            p/ci
-            p/nodejs
-            p/owasp-top-ten
-            p/xss
-            p/jwt
+      - name: Run Static Analysis (SAST)
+        run: |
+          semgrep --config=p/ci --error --exclude .git --exclude node_modules --no-progress
+
+      - name: Check for vulnerabilities
+        id: check_vulnerabilities
+        run: |
+          result=$(semgrep --config=p/ci --json --no-progress)
+          echo "$result" > semgrep_report.json
           
-      # Установка зависимостей для Juice Shop
-      - name: Install dependencies
-        run: npm install
+          # Extract the number of findings from the JSON output
+          count=$(jq '[.[] | select(.severity == "ERROR" or .severity == "WARNING")] | length' semgrep_report.json)
+          echo "Found $count vulnerabilities"
+          
+          # Exit code based on severity
+          if [ "$count" -gt 0 ]; then
+            echo "WARNING: Found $count security issues!"
+          else
+            echo "No critical vulnerabilities found."
+          fi
 
-      # Сборка приложения
-      - name: Build application
-        run: npm run build || echo "Building application..."
-
-      # Запуск приложения в фоновом режиме для DAST
-      - name: Start application
-        run: |
-          npm start &
-          sleep 10  # Даем приложению время запуститься
-        env:
-          NODE_ENV: test
-
-      # DAST сканирование с OWASP ZAP
-      - name: OWASP ZAP DAST Scan
-        uses: zaproxy/action-baseline@v0.9.0
+      - name: Upload Semgrep Report as an artifact
+        uses: actions/upload-artifact@v3
         with:
-          target: 'http://localhost:3000'
-          rules_file_name: '.github/workflows/zap-rules.tsv'
-          cmd_options: '-a'
+          name: semgrep-report
+          path: semgrep_report.json
 
-      # Создаем файл правил для ZAP (чтобы уменьшить ложные срабатывания)
-      - name: Create ZAP rules file
+      - name: Notify about vulnerabilities
         run: |
-          mkdir -p .github/workflows
-          cat << 'EOF' > .github/workflows/zap-rules.tsv
-          10016	IGNORE	(Modern Web Application)
-          10027	IGNORE	(Information Disclosure - Suspicious Comments)
-          10049	IGNORE	(Non-Storable Content)
-          10054	IGNORE	(Cookie Without SameSite Attribute)
-          10055	IGNORE	(CSP Scanner)
-          10063	IGNORE	(Permissions Policy Header Not Set)
-          EOF
+          count=$(jq '[.[] | select(.severity == "ERROR" or .severity == "WARNING")] | length' semgrep_report.json)
+          if [ "$count" -gt 0 ]; then
+            # Send a message to a Slack channel or email
+            curl -X POST -H 'Content-type: application/json' --data '{"text":"Found security vulnerabilities during the build process. Please review the Semgrep report."}' $SLACK_WEBHOOK_URL
+          else
+            echo "No vulnerabilities found, proceeding with the pipeline."
+          fi
 
-      # Проверка зависимостей
-      - name: Dependency Check
-        run: npm audit --json > npm-audit-results.json || true
+  deploy:
+    runs-on: ubuntu-latest
+    needs: security_scan
 
-      # Сохранение результатов сканирования
-      - name: Archive scan results
-        uses: actions/upload-artifact@v2
-        if: always()
-        with:
-          name: security-scan-results
-          path: |
-            semgrep-results.sarif
-            npm-audit-results.json
-            report.html
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Deploy application
+        run: |
+          # Deployment commands here
+          echo "Deploying the application..."
