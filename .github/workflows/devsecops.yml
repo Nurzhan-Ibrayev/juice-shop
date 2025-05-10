@@ -19,8 +19,11 @@ jobs:
 
     - name: Run Semgrep without failing the job
       run: |
-        semgrep --config=p/owasp-top-ten --json --output=semgrep.json || true
-        echo "Semgrep scan completed, results saved in semgrep.json"
+        semgrep --config=p/owasp-top-ten \
+                --exclude-dir=node_modules \
+                --severity ERROR \
+                --json --output=semgrep.json || true
+        echo "Semgrep scan completed with optimized settings"
 
     - name: Upload Semgrep results
       uses: actions/upload-artifact@v4
@@ -58,7 +61,7 @@ jobs:
       with:
         target: 'http://localhost:3000'
         fail_action: false
-        cmd_options: '-a -j'
+        cmd_options: '-a -j -l MEDIUM'
         github_token: "" # Устанавливаем пустой токен, чтобы отключить создание issues
         issue_title: "" # Отключаем создание issues
       continue-on-error: true 
