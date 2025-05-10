@@ -12,21 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-
-    - name: Install Semgrep
-      run: |
-        pip install semgrep
-
-    - name: Run Semgrep without failing the job
-      run: |
-        semgrep --config=p/owasp-top-ten --json --output=semgrep.json || true
-        echo "Semgrep scan completed, results saved in semgrep.json"
-
+    
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: p/owasp-top-ten
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    
     - name: Upload Semgrep results
       uses: actions/upload-artifact@v4
       with:
         name: semgrep-results
-        path: semgrep.json
+        path: semgrep.sarif
 
   dast:
     name: Dynamic Application Security Testing (DAST)
@@ -37,21 +35,31 @@ jobs:
         image: bkimminich/juice-shop
         ports:
           - 3000:3000
-
+    
     steps:
     - uses: actions/checkout@v4
 
     - name: Wait for Juice Shop to be ready
       run: |
-        timeout 60 bash -c 'while ! curl -s http://juice-shop:3000 >/dev/null; do sleep 5; done'
+        echo "Waiting for Juice Shop on http://localhost:3000 ..."
+        for i in {1..12}; do
+          if curl -s http://localhost:3000 >/dev/null; then
+            echo "Juice Shop is up!"
+            break
+          fi
+          echo "Waiting..."
+          sleep 5
+        done
 
-    - name: Run OWASP ZAP Baseline Scan (ignore failures)
+    - name: Check Juice Shop logs
+      run: docker logs $(docker ps -q --filter "ancestor=bkimminich/juice-shop")
+
+    - name: Run OWASP ZAP Baseline Scan
       uses: zaproxy/action-baseline@v0.7.0
       with:
         target: 'http://localhost:3000'
         rules_file_name: 'juice-shop-rules.tsv'
         cmd_options: '-a'
-      continue-on-error: true
 
     - name: Upload ZAP results
       uses: actions/upload-artifact@v4
