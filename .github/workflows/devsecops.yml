@@ -10,14 +10,15 @@ jobs:
   sast:
     name: Static Application Security Testing (SAST)
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Install Semgrep
-      run: |
-        pip install semgrep
+      run: pip install semgrep
 
-    - name: Run Semgrep without failing the job
+    - name: Run Semgrep with optimized config
       run: |
         semgrep --config=p/owasp-top-ten \
                 --exclude-dir=node_modules \
@@ -35,14 +36,17 @@ jobs:
     name: Dynamic Application Security Testing (DAST)
     needs: sast
     runs-on: ubuntu-latest
+
     services:
       juice-shop:
         image: bkimminich/juice-shop
         ports:
           - 3000:3000
-    
+
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Wait for Juice Shop to be ready
       run: |
         echo "Waiting for Juice Shop on http://localhost:3000 ..."
@@ -51,20 +55,23 @@ jobs:
             echo "Juice Shop is up!"
             break
           fi
-          echo "Waiting..."
+          echo "Still waiting..."
           sleep 5
         done
+
     - name: Check Juice Shop logs
       run: docker logs $(docker ps -q --filter "ancestor=bkimminich/juice-shop")
-    - name: Run OWASP ZAP Baseline Scan
+
+    - name: Run OWASP ZAP Baseline Scan with filters
       uses: zaproxy/action-baseline@v0.10.0
       with:
         target: 'http://localhost:3000'
         fail_action: false
-        cmd_options: '-a -j -l MEDIUM'
-        github_token: "" # Устанавливаем пустой токен, чтобы отключить создание issues
-        issue_title: "" # Отключаем создание issues
-      continue-on-error: true 
+        cmd_options: '-a -j -l MEDIUM'  # only show Medium and High severity issues
+        github_token: ""               # disable GitHub issues
+        issue_title: ""
+      continue-on-error: true          # don't fail job if vulnerabilities are found
+
     - name: Upload ZAP results
       uses: actions/upload-artifact@v4
       with:
@@ -73,9 +80,10 @@ jobs:
           report_json.json
           report_html.html
           report_md.md
+
     - name: Display summary
       run: |
         echo "DAST Scan completed"
         if [ -f report_json.json ]; then
-          echo "Scan completed successfully"
+          echo "Found $(jq '.site[0].alerts | length' report_json.json) alerts (filtered by severity)"
         fi
