@@ -31,7 +31,7 @@ jobs:
           cat semgrep_report.json
 
       - name: Upload Semgrep Report as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         with:
           name: semgrep-report
           path: semgrep_report.json
