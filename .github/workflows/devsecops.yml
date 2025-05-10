@@ -21,12 +21,24 @@ jobs:
         run: |
           semgrep --config=p/ci --error --exclude .git --exclude node_modules --no-progress
 
+      - name: Create Semgrep report
+        id: create_report
+        run: |
+          # Run semgrep and save the output to a JSON file
+          semgrep --config=p/ci --json --no-progress > semgrep_report.json
+          
+          # Optionally, print the content of the report for debugging
+          cat semgrep_report.json
+
+      - name: Upload Semgrep Report as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-report
+          path: semgrep_report.json
+
       - name: Check for vulnerabilities
         id: check_vulnerabilities
         run: |
-          result=$(semgrep --config=p/ci --json --no-progress)
-          echo "$result" > semgrep_report.json
-          
           # Extract the number of findings from the JSON output
           count=$(jq '[.[] | select(.severity == "ERROR" or .severity == "WARNING")] | length' semgrep_report.json)
           echo "Found $count vulnerabilities"
@@ -37,12 +49,6 @@ jobs:
           else
             echo "No critical vulnerabilities found."
           fi
-
-      - name: Upload Semgrep Report as an artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: semgrep-report
-          path: semgrep_report.json
 
       - name: Notify about vulnerabilities
         run: |
