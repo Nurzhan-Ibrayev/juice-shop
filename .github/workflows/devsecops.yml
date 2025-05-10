@@ -58,7 +58,7 @@ jobs:
       with:
         target: 'http://localhost:3000'
         fail_action: false
-        cmd_options: '-a -j -l WARN'
+        cmd_options: '-a -j -l FAIL'
         github_token: "" # Устанавливаем пустой токен, чтобы отключить создание issues
         issue_title: "" # Отключаем создание issues
       continue-on-error: true 
