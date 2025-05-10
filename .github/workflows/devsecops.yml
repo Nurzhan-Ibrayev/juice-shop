@@ -17,3 +17,20 @@ jobs:
         uses: returntocorp/semgrep-action@v1
         with:
           config: "p/ci"
+  dast:
+    runs-on: ubuntu-latest
+    needs: sast  # этот блок выполнится после SAST
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Запускаем Juice Shop в контейнере
+        run: docker run -d -p 3000:3000 --name juice bkimminich/juice-shop
+
+      - name: Ждём запуска приложения
+        run: sleep 20
+
+      - name: OWASP ZAP Scan (DAST)
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'http://localhost:3000'
