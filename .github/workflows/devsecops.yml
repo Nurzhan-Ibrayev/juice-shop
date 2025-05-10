@@ -28,7 +28,7 @@ jobs:
         name: semgrep-results
         path: semgrep.json
 
-   dast:
+  dast:
     name: Dynamic Application Security Testing (DAST)
     needs: sast
     runs-on: ubuntu-latest
