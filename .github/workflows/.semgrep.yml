@@ -1,0 +1,7 @@
+rules:
+  - id: juice-shop-custom
+    patterns:
+      - pattern: "eval(...)"
+    message: "Potential eval() vulnerability detected"
+    languages: [javascript]
+    severity: WARNING
