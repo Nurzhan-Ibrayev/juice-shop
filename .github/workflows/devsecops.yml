@@ -11,7 +11,7 @@ jobs:
     name: Static Application Security Testing (SAST)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Run Semgrep
       uses: returntocorp/semgrep-action@v1
@@ -21,7 +21,7 @@ jobs:
         SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
     
     - name: Upload Semgrep results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: semgrep-results
         path: semgrep.sarif
@@ -37,8 +37,11 @@ jobs:
           - 3000:3000
     
     steps:
+    - uses: actions/checkout@v4
+    
     - name: Wait for Juice Shop to be ready
-      run: sleep 30
+      run: |
+        timeout 60 bash -c 'while ! curl -s http://juice-shop:3000 >/dev/null; do sleep 5; done'
     
     - name: Run OWASP ZAP Baseline Scan
       uses: zaproxy/action-baseline@v0.7.0
@@ -48,7 +51,14 @@ jobs:
         cmd_options: '-a'
     
     - name: Upload ZAP results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zap-results
         path: zap-results.json
+    
+    - name: Display summary
+      run: |
+        echo "DAST Scan completed"
+        if [ -f zap-results.json ]; then
+          echo "Found $(jq '.site[0].alerts | length' zap-results.json) vulnerabilities"
+        fi
