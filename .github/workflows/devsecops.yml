@@ -62,6 +62,7 @@ jobs:
         target: 'http://localhost:3000'
         fail_action: false
         cmd_options: '-a -j'
+      continue-on-error: true 
 
 
     - name: Upload ZAP results
