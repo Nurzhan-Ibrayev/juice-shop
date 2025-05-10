@@ -15,8 +15,9 @@ jobs:
 
       - name: Install Semgrep (SAST)
         run: |
-          curl -s https://semgrep.dev/install | bash
-          # Устанавливаем последнюю версию Semgrep
+          curl -sL https://github.com/returntocorp/semgrep/releases/download/v1.76.0/semgrep-linux-amd64-v1.76.0.tar.gz -o semgrep.tar.gz
+          tar -xvf semgrep.tar.gz
+          sudo mv semgrep /usr/local/bin/
 
       - name: Run Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
