@@ -1,74 +1,54 @@
-name: CI/CD Pipeline with Security Scans
+name: DevSecOps Pipeline
 
 on:
   push:
-    branches:
-      - master
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
-  security_scan:
+  sast:
+    name: Static Application Security Testing (SAST)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+    
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: p/owasp-top-ten
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    
+    - name: Upload Semgrep results
+      uses: actions/upload-artifact@v3
+      with:
+        name: semgrep-results
+        path: semgrep.sarif
 
-      - name: Install Semgrep
-        run: |
-          curl -s https://semgrep.dev/install | bash
-
-      - name: Run Static Analysis (SAST)
-        run: |
-          semgrep --config=p/ci --error --exclude .git --exclude node_modules --no-progress
-
-      - name: Create Semgrep report
-        id: create_report
-        run: |
-          # Run semgrep and save the output to a JSON file
-          semgrep --config=p/ci --json --no-progress > semgrep_report.json
-          
-          # Optionally, print the content of the report for debugging
-          cat semgrep_report.json
-
-      - name: Upload Semgrep Report as an artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: semgrep-report
-          path: semgrep_report.json
-
-      - name: Check for vulnerabilities
-        id: check_vulnerabilities
-        run: |
-          # Extract the number of findings from the JSON output
-          count=$(jq '[.[] | select(.severity == "ERROR" or .severity == "WARNING")] | length' semgrep_report.json)
-          echo "Found $count vulnerabilities"
-          
-          # Exit code based on severity
-          if [ "$count" -gt 0 ]; then
-            echo "WARNING: Found $count security issues!"
-          else
-            echo "No critical vulnerabilities found."
-          fi
-
-      - name: Notify about vulnerabilities
-        run: |
-          count=$(jq '[.[] | select(.severity == "ERROR" or .severity == "WARNING")] | length' semgrep_report.json)
-          if [ "$count" -gt 0 ]; then
-            # Send a message to a Slack channel or email
-            curl -X POST -H 'Content-type: application/json' --data '{"text":"Found security vulnerabilities during the build process. Please review the Semgrep report."}' $SLACK_WEBHOOK_URL
-          else
-            echo "No vulnerabilities found, proceeding with the pipeline."
-          fi
-
-  deploy:
+  dast:
+    name: Dynamic Application Security Testing (DAST)
+    needs: sast
     runs-on: ubuntu-latest
-    needs: security_scan
-
+    services:
+      juice-shop:
+        image: bkimminich/juice-shop
+        ports:
+          - 3000:3000
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Deploy application
-        run: |
-          # Deployment commands here
-          echo "Deploying the application..."
+    - name: Wait for Juice Shop to be ready
+      run: sleep 30
+    
+    - name: Run OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.7.0
+      with:
+        target: 'http://juice-shop:3000'
+        rules_file_name: 'juice-shop-rules.tsv'
+        cmd_options: '-a'
+    
+    - name: Upload ZAP results
+      uses: actions/upload-artifact@v3
+      with:
+        name: zap-results
+        path: zap-results.json
