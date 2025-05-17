@@ -1,0 +1,78 @@
+name: Final Pipeline
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  sast:
+    name: Static Application Security Testing (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Semgrep
+        run: |
+          pip install semgrep
+      - name: Run Semgrep without failing the job
+        run: |
+          semgrep --config=p/owasp-top-ten --config=p/python --json --output=semgrep.json --exclude="tests/*" || true
+          echo "Semgrep scan completed, results saved in semgrep.json"
+          cat semgrep.json
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep.json
+
+  recommendations:
+    name: Generate OpenAI Recommendations
+    runs-on: ubuntu-latest
+    needs: sast
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install openai python-dotenv
+      - name: Download semgrep.json artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-results
+          path: ./
+      - name: Run OpenAI Recommendation Script
+        run: |
+          ls -la
+          cat semgrep.json
+          python scripts/generate_openai_recommendations.py semgrep.json || echo "Failed to generate recommendations"
+          mv recommendations.md semgrep_recommendations.md
+          cat semgrep_recommendations.md
+      - name: Upload Markdown report
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report-md
+          path: semgrep_recommendations.md
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            let recommendations = '';
+            try {
+              recommendations = fs.readFileSync('semgrep_recommendations.md', 'utf8');
+            } catch (e) {
+              recommendations = 'No recommendations generated due to an error.';
+            }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: recommendations
+            });
