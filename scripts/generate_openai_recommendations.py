@@ -4,8 +4,23 @@ import os
 from openai import OpenAI
 from openai import OpenAIError
 from dotenv import load_dotenv
+
 load_dotenv()
 
+def detect_language(issue):
+    """Detects programming language from check_id or file extension."""
+    check_id = issue.get("check_id", "")
+    file_path = issue.get("path", "")
+    extension_map = {
+        ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript",
+        ".java": "Java", ".go": "Go", ".php": "PHP", ".rb": "Ruby",
+        ".c": "C", ".cpp": "C++", ".cs": "C#", ".sol": "Solidity"
+    }
+    for lang in ["python", "javascript", "typescript", "java", "go", "php", "ruby", "c", "cpp", "csharp", "solidity"]:
+        if lang in check_id.lower():
+            return lang.capitalize()
+    ext = os.path.splitext(file_path)[1].lower()
+    return extension_map.get(ext, "Unknown")
 
 def get_openai_recommendation(issue):
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -13,6 +28,7 @@ def get_openai_recommendation(issue):
     severity = issue.get("extra", {}).get("severity", "UNKNOWN")
     cwe = ", ".join(metadata.get("cwe", [])) if metadata.get("cwe") else "N/A"
     owasp = ", ".join(metadata.get("owasp", [])) if metadata.get("owasp") else "N/A"
+    language = detect_language(issue)
     prompt = f"""
 You are a code security expert. The following issue was found by Semgrep:
 - File: {issue['path']}
@@ -22,8 +38,9 @@ You are a code security expert. The following issue was found by Semgrep:
 - Severity: {severity}
 - CWE: {cwe}
 - OWASP: {owasp}
+- Language: {language}
 
-Provide a clear and concise recommendation to fix this issue in Python/Flask (using SQLite if applicable). Use Markdown formatting, include a code example if relevant, and keep it under 100 words. Reference provided URLs if relevant: {', '.join(metadata.get('references', []))}.
+Provide a clear and concise recommendation to fix this issue in {language}. Use Markdown formatting, include a code example if relevant, and keep it under 100 words. Reference provided URLs if relevant: {', '.join(metadata.get('references', []))}.
 """
     try:
         response = client.chat.completions.create(
@@ -62,12 +79,12 @@ def main():
             else:
                 reco = get_openai_recommendation(issue)
                 cache[cache_key] = reco
-
             recommendations.append(
                 f"### Issue in {issue['path']}:{issue['start']['line']}\n"
                 f"**Rule**: {issue['check_id']}\n"
                 f"**Severity**: {severity}\n"
                 f"**Message**: {issue['extra']['message']}\n"
+                f"**Language**: {detect_language(issue)}\n"
                 f"**Recommendation**:\n{reco}\n"
             )
     output_file = "recommendations.md"
