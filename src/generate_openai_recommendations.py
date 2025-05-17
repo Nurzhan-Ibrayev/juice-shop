@@ -11,17 +11,14 @@ def detect_language(issue):
     """Определяет язык программирования по check_id или расширению файла."""
     check_id = issue.get("check_id", "")
     file_path = issue.get("path", "")
-    # Маппинг расширений файлов на языки
     extension_map = {
         ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", 
         ".java": "Java", ".go": "Go", ".php": "PHP", ".rb": "Ruby", 
         ".c": "C", ".cpp": "C++", ".cs": "C#"
     }
-    # Проверка по check_id
     for lang in ["python", "javascript", "typescript", "java", "go", "php", "ruby", "c", "cpp", "csharp"]:
         if lang in check_id.lower():
             return lang.capitalize()
-    # Проверка по расширению файла
     ext = os.path.splitext(file_path)[1].lower()
     return extension_map.get(ext, "Unknown")
 
@@ -34,7 +31,6 @@ def get_openai_recommendation(issue):
     language = detect_language(issue)
     technologies = metadata.get("technology", []) or ["Unknown"]
     
-    # Базовый промпт с адаптацией под язык
     prompt = f"""
 You are a code security expert. The following issue was found by Semgrep:
 - File: {issue['path']}
@@ -73,11 +69,15 @@ def main():
     if not os.path.exists(input_file):
         print(f"Error: {input_file} not found")
         sys.exit(1)
-    with open(input_file) as f:
-        data = json.load(f)
+    try:
+        with open(input_file) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in {input_file}: {str(e)}")
+        sys.exit(1)
     recommendations = []
     cache = {}
-    for issue in data.get("results", [])[:50]:  # Ограничение для API
+    for issue in data.get("results", [])[:50]:
         severity = issue.get("severity", "UNKNOWN")
         if severity in ["ERROR", "WARNING"]:
             cache_key = f"{issue['check_id']}:{issue['extra']['message']}"
@@ -95,13 +95,16 @@ def main():
                 f"**Recommendation**:\n{reco}\n"
             )
     output_file = "recommendations.md"
-    with open(output_file, "w") as f:
-        if recommendations:
+    if recommendations:
+        with open(output_file, "w") as f:
             f.write("# Semgrep + Open AI Recommendations\n\n")
             f.write("\n".join(recommendations))
-        else:
+        print(f"Recommendations written to {output_file}")
+    else:
+        with open(output_file, "w") as f:
             f.write("No critical issues found by Semgrep.")
-    print(f"Recommendations written to {output_file}")
+        print(f"No issues found; empty {output_file} created")
+    return output_file
 
 if __name__ == "__main__":
     main()
