@@ -18,7 +18,7 @@ jobs:
       - name: Run Semgrep
         run: |
           semgrep --config=p/owasp-top-ten --config=p/python --config=p/javascript \
-                  --config=p/java --config=p/go --config=p/php --config=p/ruby \
+                  --config=p/java --config=p/php  \
                   --json --output=semgrep.json || true
           cat semgrep.json
       - name: Upload Semgrep results
@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install openai python-dotenv
-      - name: Download semgrep.json
+      - name: Download semgrep.json artifact
         uses: actions/download-artifact@v4
         with:
           name: semgrep-results
@@ -59,3 +59,21 @@ jobs:
         with:
           name: semgrep-report-md
           path: semgrep_recommendations.md
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            let recommendations = '';
+            try {
+              recommendations = fs.readFileSync('semgrep_recommendations.md', 'utf8');
+            } catch (e) {
+              recommendations = 'No recommendations generated due to an error.';
+            }
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: recommendations
+            });
